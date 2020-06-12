@@ -9,11 +9,17 @@ import androidx.core.app.ActivityCompat;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.telephony.SmsManager;
@@ -27,7 +33,7 @@ import com.example.lab8.Database.Data;
 import com.example.lab8.Entity.Contacto;
 import com.example.lab8.Gps.GPSTracker;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements SensorEventListener  {
 
     Double latitud=0.0;
     Double longitud=0.0;
@@ -35,8 +41,12 @@ public class MainActivity extends AppCompatActivity {
     private Toolbar toolbar;
     private MediaPlayer mPlayer;
     boolean sendSms=false;
-
+    private double rootSquare;
     private BroadcastReceiver broadcastReceiver;
+
+    private static final String TAG= "FallDetection";
+    private SensorManager sensorManager;
+    Sensor accelerometer;
 
     @RequiresApi(api = Build.VERSION_CODES.M)
     @Override
@@ -67,7 +77,8 @@ public class MainActivity extends AppCompatActivity {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{
                    Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION,
-                    Manifest.permission.INTERNET,Manifest.permission.READ_PHONE_STATE, Manifest.permission.SEND_SMS
+                    Manifest.permission.INTERNET,Manifest.permission.READ_PHONE_STATE, Manifest.permission.SEND_SMS,
+                    Manifest.permission.CALL_PHONE
             },10);
             // TODO: Consider calling
             //    ActivityCompat#requestPermissions
@@ -90,16 +101,20 @@ public class MainActivity extends AppCompatActivity {
                 if(!sendSms) {
                     mPlayer.start();
                     sendSms();
+                    sendSms=true;
                 }
                 else{
                     sendSms=false;
                     mPlayer.stop();
-
+                    mPlayer = MediaPlayer.create( MainActivity.this, R.raw.alarm);
                 }
+
             }
         });
 
-
+       sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        sensorManager.registerListener(MainActivity.this, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
     }
 
 
@@ -116,7 +131,33 @@ public class MainActivity extends AppCompatActivity {
       }
     }
 
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        //Log.d(TAG, "onSensorChanged: X"+ event.values[0] + "Y: "+ event.values[1] + "Z: "+ event.values[2]);
+        //++index;
+         float x =  event.values[0];
+        float y =  event.values[1];
+        float z = event.values[2];
 
+        rootSquare=Math.sqrt(Math.pow(x,2)+Math.pow(y,2)+Math.pow(z,2));
+        if(rootSquare<2.0)
+        {
+
+            Toast.makeText(this, "Fall detected", Toast.LENGTH_SHORT).show();
+            if(!Data.persona.getContactos().isEmpty()) {
+                Intent callIntent = new Intent(Intent.ACTION_CALL);
+                callIntent.setData(Uri.parse("tel:" + Data.persona.getContactos().get(0).getTelefono()));
+                startActivity(callIntent);
+            }else {
+                Toast.makeText(this, "CALLING: LA PIEDAD", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+
+    }
     private void sendSms(){
       try {
 
@@ -137,7 +178,7 @@ public class MainActivity extends AppCompatActivity {
 
                 // sms.sendTextMessage(c.getTelefono(), null,msg, null, null);
              }
-             sendSms=true;
+
           }
           else{
               Log.v("NULL","NULL");
